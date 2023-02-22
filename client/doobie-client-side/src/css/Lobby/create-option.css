@@ -1,0 +1,12 @@
+.create-btn{
+    margin-top: 3%;
+}
+
+.create-details{
+
+    height: 40vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+}

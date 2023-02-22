@@ -1,0 +1,42 @@
+.lobby-settings{ 
+    margin: 10%;
+}
+
+
+
+/* css for options of the game */ 
+.options{ 
+    background-color: #ca5cdd;
+}
+
+
+.flex-options{
+    display: flex;
+    gap: 1%;
+    background-color: white;
+
+}
+
+.flex-option{
+    font-weight: 900;
+}
+
+.active{
+    background-color: white;
+    color: black;
+    border: 5px solid black;
+
+}
+
+.inactive{
+    background-color: #333333;
+    color: white;
+    border: 1px solid black;
+
+}
+
+.flex-options div {
+
+    /* flex properties */
+    flex: 1;
+}

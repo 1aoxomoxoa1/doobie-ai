@@ -1,0 +1,214 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('generated:server');
+var http = require('http');
+const {Server} = require('socket.io');
+const {getRandomString} = require('../public/javascripts/utils');
+const {getFilteredMapWithRealRooms, isUserSessionInRoom} = require('../public/javascripts/join-room');
+const {leaveRoom} = require('../public/javascripts/leave-room');
+require('dotenv').config()
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3001');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+
+const io = new Server(server, {
+  cors: {
+      origin: "http://localhost:3000", //host for react front-end
+      methods: ["GET", "POST"]
+  },
+});
+
+//key : roomId -- value: [] players
+let players = new Map(); 
+
+io.on("connection", (socket) => {
+  console.log('user connected ' + socket.id);
+
+  //creating a socket room
+  socket.on("create-room", (data) => {
+
+    //pick a random room number to join
+    let roomNumber = getRandomString(6);
+    while(io.sockets.adapter.rooms.has(roomNumber) === true){
+      roomNumber = getRandomString(6);
+    }
+
+    console.log(`creating room ${roomNumber}`);
+    players.set(roomNumber, [{user: data.user, id: socket.id}]);
+    socket.join(roomNumber);
+
+
+    socket.emit("recv-room", {roomNumber: roomNumber});
+  }); 
+
+  //code for joining socket rooms
+  socket.on("join-room", (data) => {
+    console.log(data.room);
+    console.log(data.user);
+    console.log(io.sockets.adapter.rooms)
+
+    //if the room does not already exist
+    if(!io.sockets.adapter.rooms.has(data.room)){
+      socket.emit("join-room-resp", {roomExists: false, room: undefined});
+    }else{
+
+      //if a user in the same session is already in the room
+      if(isUserSessionInRoom(io, players, data.user, data.room)){
+        socket.emit("join-room-resp", {roomExists: false, joinData: data, room: undefined})
+        console.log('because user is already in room')
+        return;
+      }
+
+      console.log(`continuing to join room ${data.room}`);
+    
+      //get current active players in the map
+      let filteredCurrentRoomInMap = getFilteredMapWithRealRooms(io, players, data.room);
+
+      let newCurrentRoom = [{user: data.user, id: socket.id}, ...filteredCurrentRoomInMap];
+      console.log(newCurrentRoom);
+      console.log('new current room abovee');
+      players.set(data.room, newCurrentRoom);
+      console.log(players);
+      socket.join(data.room);
+      socket.emit("join-room-resp", {roomExists: true, joinData: data, room: newCurrentRoom});
+
+      socket.to(data.room).emit("player-joins", {room: newCurrentRoom});
+    }
+  });
+
+  //for checking the current room -- data sent: {room: roomNumber}
+  socket.on('check-room', (data) => {
+    const room = data.room;
+    let filteredCurrentRoomInMap = getFilteredMapWithRealRooms(io, players, room);
+    console.log(filteredCurrentRoomInMap);
+    console.log('filteredCurrentRoomInMap above');
+    console.log(`filteredCurrentRoomInMap is undefined: ${filteredCurrentRoomInMap === undefined}`);
+
+    socket.emit('check-room-resp', {room: filteredCurrentRoomInMap});
+  })
+
+  //for starting the game 
+  socket.on('start-game', (data) => {
+    console.log(`starting game to ${data.room} `)
+    console.log(io.sockets.adapter.rooms.get(data.room));
+    socket.to(data.room).emit('start-game-resp', {isGameStarted: true})
+  })
+
+  //for checking the current room -- data sent: {room: roomNumber}
+  socket.on('leave', (data) => {
+    console.log('within leave-game on server')
+    console.log(data.room)
+    console.log(socket.id);
+    
+    //remove the player from the map object
+    leaveRoom(data.room, players, socket.id)
+
+    console.log('real room before leave: ')
+    console.log(io.sockets.adapter.rooms.get(data.room));
+    console.log('real room after leave: ');
+    socket.leave(data.room);
+    console.log(io.sockets.adapter.rooms.get(data.room));
+
+
+    //emit the updated room to the player 
+    socket.to(data.room).emit('leave-resp', {players: Array.from(players.get(data.room))})
+  })
+
+  
+  socket.on("disconnecting", (data) => {
+    console.log(`${socket.id} disconnects`);
+    socket.to(data.room).emit('player-joins', {data: `Player ${socket.id} disconnects`})
+  })
+  
+})
+
+
+
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+  console.log('Listening on ' + bind);
+}
+
+
+module.exports = {players};

@@ -1,0 +1,35 @@
+.join-details-flex{
+
+    height: 40vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+}
+
+.join-details > *{
+    margin: 5% 0;
+}
+
+
+
+
+.auth-ctr{
+    margin: 0 auto;
+}
+
+.auth-inputs{
+    width: 30px;
+    margin: 0 2px;
+    text-align: center;
+    border: 2px solid black;
+
+}
+
+.def-auth{
+    border: 2px solid black;
+}
+
+.err-auth{
+    border: 2px solid red;
+}
